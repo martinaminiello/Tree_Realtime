@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Firebase JS</title>
+</head>
+<body>
+  <h1>Firebase Realtime DB Test</h1>
+
+<button
+  id="open"
+  data-project-id="pjs_0000000004"
+  data-author="user_990"
+  data-title="Esempio js"
+  data-co-authors='{"0": "user_111", "1": "user_990"}'
+  data-tree='{
+  "main.tex": {
+    "content": "Contenuto bast afile",
+    "last-modifier": "user_001",
+    "id_file": "f_001"
+  },
+  "NO_CHAPTERS_ALLOWED": {
+    "id_folder": "d_001",
+    "chapterwewewew.tex": {
+      "content": "Contenuto del capitolo1",
+      "last-modifier": "user_001",
+      "id_file": "f_002"
+    },
+    "chapterLOLDEL.tex": {
+      "content": "Contenuto del capitolo1",
+      "last-modifier": "user_001",
+      "id_file": "f_003"
+    },
+    "CHAPTERS_ALLOWED": {
+      "id_folder": "d_002",
+      "chapter88888888888888h.tex": {
+        "content": "Contenuto del capitolo1",
+        "last-modifier": "user_001",
+        "id_file": "f_004"
+      },
+      "chapterlollipop.tex": {
+        "content": "Contenuto del capitolo1",
+        "last-modifier": "user_001",
+        "id_file": "f_005"
+      }
+    }
+  }
+}
+'>
+  Open project
+</button>
+
+<button id="close" data-author="user_990" data-project-id="pjs_0000000004">Close project</button>
+
+<button id="update" data-project-id="pjs_0000000004" 
+data-tree='{
+  "o.tex": {
+    "content": "Contenuto bast afile",
+    "last-modifier": "user_001",
+    "id_file": "f_001"
+  },
+  "NO_CHAPTERS": {
+    "id_folder": "d_001",
+    "chapterwewewew.tex": {
+      "content": "Contenuto del capitolo1",
+      "last-modifier": "user_001",
+      "id_file": "f_002"
+    },
+    "chapterLOLDEL.tex": {
+      "content": "Contenuto del capitolo1",
+      "last-modifier": "user_001",
+      "id_file": "f_003"
+    },
+    "CHAPTERS_ALLOWED": {
+      "id_folder": "d_002",
+      "chapter88888888888888h.tex": {
+        "content": "Contenuto del capitolo1",
+        "last-modifier": "user_001",
+        "id_file": "f_004"
+      },
+      "chapterlollipop.tex": {
+        "content": "Contenuto del capitolo1",
+        "last-modifier": "user_001",
+        "id_file": "f_005"
+      }
+    }
+  }
+}
+'>Update project</button>
+
+<button id="delete"  data-project-id="pjs_0000000004" >Delete project</button>
+
+
+<script type="module" src="main.js"></script>
+
+</body>
+</html>
