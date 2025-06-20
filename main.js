@@ -10,6 +10,17 @@ console.log(firebaseConfig)
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 
+
+
+// Helper to update current authors
+function updateCurrentAuthors(currentAuthorsArray, author) {
+  if (!currentAuthorsArray.includes(author)) {
+    currentAuthorsArray.push(author);
+  }
+  return currentAuthorsArray;
+}
+
+
 // Helper to retrieve fields from RT firebase
 async function fetch(database, projectPath, field) {
   const snapshot = await get(ref(database, projectPath));
@@ -27,41 +38,9 @@ async function fetch(database, projectPath, field) {
   return fieldData;
 }
 
-// Helper to update current authors
-function updateCurrentAuthors(currentAuthorsArray, author) {
-  if (!currentAuthorsArray.includes(author)) {
-    currentAuthorsArray.push(author);
-  }
-  return currentAuthorsArray;
-}
 
 
-// BUILDING THE TREE FROM METADATA
-function sanitizeKey(key) {
-  if (typeof key !== 'string') {
-    console.warn('sanitizeKey: valore non valido');
-    console.log('Tipo:', typeof key);
-    console.log('Contenuto:', key);
-
-    if (key === null) {
-      console.log('È null');
-    } else if (Array.isArray(key)) {
-      console.log('È un array');
-    } else if (typeof key === 'object') {
-      console.log('È un oggetto');
-    }
-
-    return '';
-  }
-
-  return key.replace(/[.#$[\]/]/g, '_');
-}
-
-
-
-
-
-// Open project (create or update)
+// Open project (create if it doesn't exist with current author or add another current author)
 async function open_project(database, id, author, projectData) {
   const projectPath = `active_projects/${id}`;
   const snapshot = await get(ref(database, projectPath));
@@ -90,63 +69,51 @@ async function open_project(database, id, author, projectData) {
 }
 
 
-
-async function moveInDatabase(fromPath, toPath) {
-  const data = await getDataFromDatabase(fromPath);
-  if (data !== null) {
-    await updateDatabase(toPath, data);
-    await deleteFromDatabase(fromPath);
-  } else {
-    console.warn(`moveInDatabase: path sorgente "${fromPath}" non esiste`);
-  }
-}
-
-
-
-
-
-
+// update project
 async function update_project(id, newTree) {
   const treePath = `active_projects/${id}/tree`;
 
-  // 1) Leggi albero precedente
+  //retrieves old tree from realtime snapshot
   const snapshot = await get(ref(database, treePath));
   const oldTree = snapshot.exists() ? snapshot.val() : {};
 
-  // 2) Mappa id -> percorso
+  //builds id map for both the old and the new tree tree
   const oldIdMap = {};
   const newIdMap = {};
   buildIdMap(oldTree, '', oldIdMap);
   buildIdMap(newTree, '', newIdMap);
 
-  // 3) Gestisci rinomina/spostamento PRIMA di aggiornare
+ 
   for (const newId in newIdMap) {
+    //if ids are the same but in different paths
+    //renomination or movements
     if (newId in oldIdMap && oldIdMap[newId] !== newIdMap[newId]) {
       const oldPath = `${treePath}/${oldIdMap[newId]}`;
+      console.log(`Renomination or movement detected`);
       await deleteFromDatabase(oldPath);
-      console.log(`Nodo rinominato/spostato id=${newId}: rimosso vecchio percorso ${oldIdMap[newId]}`);
+      console.log(`id=${newId}: old path ${oldIdMap[newId]} was removed`);
     }
   }
 
-  // 4) Aggiorna l’intero albero
+  // sets all the tree again, so also adds new elements, new renominated or moved paths
   await updateDatabase(treePath, newTree);
-  console.log('Aggiornamento albero eseguito');
+  console.log('Tree updated successfully');
 
-  // 5) Elimina i nodi obsoleti (dopo aver scritto quelli nuovi)
+  //deletes ids that are no longer present in the new tree
   for (const oldId in oldIdMap) {
     if (!(oldId in newIdMap)) {
       const deletePath = `${treePath}/${oldIdMap[oldId]}`;
       await deleteFromDatabase(deletePath);
-      console.log(`Rimosso nodo obsoleto id=${oldId} percorso=${oldIdMap[oldId]}`);
+      console.log(`Deleted id=${oldId} percorso=${oldIdMap[oldId]}`);
     }
   }
 
-  console.log('Aggiornamento progetto completato');
+  console.log('Update completed');
 }
 
 
 
-// Funzione per costruire mappa id_file/id_folder -> percorso (ricorsiva)
+
 function buildIdMap(tree, basePath = '', idMap = {}) {
   for (const key in tree) {
     const node = tree[key];
@@ -163,7 +130,7 @@ function buildIdMap(tree, basePath = '', idMap = {}) {
 }
 
 
-// Funzioni helper per interazione con Firebase (le tue esistenti)
+
 async function updateDatabase(path, data) {
   console.log(`[Firebase SET] ${path}`, data);
   await set(ref(database, path), data);
@@ -175,15 +142,34 @@ async function deleteFromDatabase(path) {
 }
 
 
+// Close project (remove current author or if no current authors are left, remove project ONLY from real time db)
+async function close_project(database, id, author) {
+  const projectPath = `active_projects/${id}`;
+  let currentAuthors = await fetch(database, projectPath, "current-authors");
 
+  if (!Array.isArray(currentAuthors)) {
+    currentAuthors = currentAuthors ? Object.values(currentAuthors) : [];
+  }
+
+  currentAuthors = currentAuthors.filter(a => a !== author);
+
+  if (currentAuthors.length === 0) {
+    await set(ref(database, projectPath), null); // Delete the project from realtime
+    console.log(`Project ${id} deleted from database.`);
+  } else {
+    await update(ref(database, projectPath), {
+      "current-authors": currentAuthors
+    });
+    console.log(`Removed author ${author} from current-authors.`);
+  }
+}
   
 
-// DELETE project PERMANENTLY
+// DELETE project PERMANENTLY (also from firestore and github)
 async function delete_project(database, id) {
   const projectPath = `active_projects/${id}`;
   await set(ref(database, projectPath), null);
   console.log(`Project ${id} deleted from Realtime database.`);
-
   
   const firestore = getFirestore();
   const docRef = doc(firestore, "projects", id);
@@ -193,6 +179,8 @@ async function delete_project(database, id) {
 }
 
 
+
+//buttons
 window.addEventListener("DOMContentLoaded", () => {
   const openBtn = document.getElementById("open");
   const closeBtn = document.getElementById("close");
@@ -205,7 +193,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const author = button.getAttribute("data-author");
       const id = button.getAttribute("data-project-id");
       const title = button.getAttribute("data-title");
-      const data_tree = sanitizeKey(button.getAttribute("data-tree"));
+      const data_tree = button.getAttribute("data-tree");
       console.log("data tree: ", data_tree);
       const tree = JSON.parse(data_tree);
       console.log("parsed tree: ", tree);
@@ -236,7 +224,7 @@ window.addEventListener("DOMContentLoaded", () => {
     updateBtn.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const id = button.getAttribute("data-project-id");
-      const data_tree = button.getAttribute("data-tree").replace(/\./g, "_");
+      const data_tree = button.getAttribute("data-tree");
       console.log("data tree: ", data_tree);
       const tree = JSON.parse(data_tree);
       console.log("parsed tree: ", tree);
@@ -265,5 +253,3 @@ window.addEventListener("DOMContentLoaded", () => {
 
 
 
-
-//delete
