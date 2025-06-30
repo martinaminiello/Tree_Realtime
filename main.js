@@ -91,7 +91,7 @@ function generateLastModifiedMap(tree, basePath = '') {
     const value = tree[key];
     const currentPath = basePath ? `${basePath}/${key}` : key;
 
-    // Se è un file
+    // file contains content
     if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
       result[currentPath] = {
         _name: key,
@@ -101,7 +101,7 @@ function generateLastModifiedMap(tree, basePath = '') {
       };
     }
 
-    // Se è una cartella
+    // folder
     else if (typeof value === 'object' && value !== null) {
       const nested = generateLastModifiedMap(value, currentPath);
       Object.assign(result, nested);
@@ -113,34 +113,8 @@ function generateLastModifiedMap(tree, basePath = '') {
 
 
 
-
-function transform_into_Firestore_tree(tree) {
-  const result = {};
-
-  for (const key in tree) {
-    const value = tree[key];
-
-    // If it's a file
-    if (typeof value === 'object' && value !== null && 'content' in value) {
-      result[key] = "";
-    }
-
-    // If it's a folder (nested structure)
-    else if (typeof value === 'object' && value !== null) {
-      const nested = transform_into_Firestore_tree(value);
-      if (Object.keys(nested).length > 0) {
-        result[key] = nested;
-      }
-    }
-  }
-
-  return result;
-}
-
-
-
 // Open project (create if it doesn't exist with current author or add another current author)
-async function open_project(firestore, id, author, projectData) {
+async function open_project(firestore, id, projectData) {
   const projectPath = `projects/${id}`;
   const projectRef = doc(firestore, projectPath);
   const snapshot = await getDoc(projectRef);
@@ -200,7 +174,7 @@ function rebuildFirestoreAsMetadata(tree, basePath = "") {
     const node = tree[uuid];
 
     if (typeof node === "string") {
-      // caso semplice: file singolo
+      // file
       const path = basePath ? `${basePath}/${node}` : node;
       result[path] = { uuid };
     } else if (typeof node === "object" && node._name) {
@@ -209,18 +183,18 @@ function rebuildFirestoreAsMetadata(tree, basePath = "") {
 
       result[folderPath] = { uuid };
 
-      // itero tutte le chiavi dentro il nodo
+      // iteration
       for (const innerUuid in node) {
         if (innerUuid === "_name") continue;
 
         const value = node[innerUuid];
 
         if (typeof value === "string") {
-          // file singolo dentro questa cartella
+          // file in folder
           const filePath = `${folderPath}/${value}`;
           result[filePath] = { uuid: innerUuid };
         } else if (typeof value === "object" && value._name) {
-          // sotto-cartella
+          // sub-folder
           const subTree = { [innerUuid]: value };
           const subResult = rebuildFirestoreAsMetadata(subTree, folderPath);
           Object.assign(result, subResult);
@@ -252,7 +226,7 @@ function compareFileLists(localList, firestoreList) {
   for (const localFile of localList) {
     const { uuid: localUuid, path: localPath, modified } = localFile;
 
-    // UUID non valido o mancante → considerato aggiunto
+    // invalid, absent or empty UUID 
     if (!localUuid || typeof localUuid !== "string" || localUuid.trim() === "") {
       result.added.push(localFile);
       continue;
@@ -277,12 +251,11 @@ function compareFileLists(localList, firestoreList) {
         result.unchanged.push(localFile);
       }
     } else {
-      // UUID valido, ma non esiste in remoto → file nuovo
       result.added.push(localFile);
     }
   }
 
-  // Trova i file eliminati: UUID nel remoto ma non più nel locale
+  // deleted: uuid is in Firestore but not in metadata
   for (const remoteFile of firestoreList) {
     if (!localByUuid[remoteFile.uuid]) {
       result.deleted.push(remoteFile);
@@ -358,7 +331,7 @@ async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or
 async function update_cache_array(relevantItems, to_delete, metadata, new_last_modified) {
   const cacheArray = [];
 
-  // Filtra solo file con content
+  // pnly files
   const filteredRelevantItems = relevantItems.filter(item => {
     const path = item.path || item.newPath;
     const meta = getMetaFromMetadataPath(path, metadata);
@@ -377,7 +350,7 @@ async function update_cache_array(relevantItems, to_delete, metadata, new_last_m
       push_status: "in-progress",
       path: path,
       timestamp: Timestamp.now(),
-      uuid_cache: lm.uuid_cache, // 👈 preso da last-modified
+      uuid_cache: lm.uuid_cache, // from last-modified
       uuid: meta.uuid || "",
       modified: meta.modified || false
     };
@@ -391,11 +364,8 @@ async function update_cache_array(relevantItems, to_delete, metadata, new_last_m
     const lm = new_last_modified[path];
 
     const itemObj = {
-      content: meta?.content || "",
       push_status: "in-progress",
       path: path,
-      timestamp: Timestamp.now(),
-      uuid_cache: lm?.uuid_cache || crypto.randomUUID(), // 👈 fallback solo se assente
       uuid: item.uuid || "",
       to_delete: true
     };
@@ -519,13 +489,11 @@ window.addEventListener("DOMContentLoaded", () => {
   if (openBtn) {
     openBtn.addEventListener("click", async (event) => {
       const button = event.currentTarget;
-      const author = button.getAttribute("data-author");
       const id = button.getAttribute("data-project-id");
       const title = button.getAttribute("data-title");
       const data_tree = button.getAttribute("data-tree");
       const rawtree = JSON.parse(data_tree);
       const lastModified = generateLastModifiedMap(rawtree);
-      const tree = transform_into_Firestore_tree(rawtree);
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
       const cacheArray = generateCacheArray(rawtree, lastModified);
 
@@ -534,7 +502,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const projectData = { id, title,"last-modified": lastModified, "co-authors": co_authors };
 
       console.log("projectData:", projectData);
-      await open_project(firestore, id, author, projectData);
+      await open_project(firestore, id, projectData);
       await writeCacheToFirestore("cache", cacheArray);
      
     });
