@@ -84,7 +84,6 @@ async function writeCacheToFirestore(projectId, cacheArray) {
 }
 
 
-//last-modified
 function generateLastModifiedMap(tree, basePath = '') {
   const result = {};
 
@@ -92,17 +91,17 @@ function generateLastModifiedMap(tree, basePath = '') {
     const value = tree[key];
     const currentPath = basePath ? `${basePath}/${key}` : key;
 
-    // If it's a file
+    // Se è un file
     if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
       result[currentPath] = {
         _name: key,
         "last-modifier": value["last-modifier"],
-        timestamp:Timestamp.now(), // Firestore will store this as a timestamp
-        uuid_cache: crypto.randomUUID()
+        timestamp: Timestamp.now(),
+        uuid_cache: value.uuid_cache || crypto.randomUUID()
       };
     }
 
-    // If it's a folder
+    // Se è una cartella
     else if (typeof value === 'object' && value !== null) {
       const nested = generateLastModifiedMap(value, currentPath);
       Object.assign(result, nested);
@@ -111,6 +110,7 @@ function generateLastModifiedMap(tree, basePath = '') {
 
   return result;
 }
+
 
 
 
@@ -139,32 +139,6 @@ function transform_into_Firestore_tree(tree) {
 
 
 
-// Helper to update current authors
-function updateCurrentAuthors(currentAuthorsArray, author) {
-  if (!currentAuthorsArray.includes(author)) {
-    currentAuthorsArray.push(author);
-  }
-  return currentAuthorsArray;
-}
-
-// Helper to retrieve fields from Firestore
-async function fetch(firestore, projectPath, field) {
-  const projectRef = doc(firestore, projectPath);
-  const snapshot = await getDoc(projectRef);
-  if (!snapshot.exists()) return null;
-
-  const data = snapshot.data();
-  const fieldData = data[field];
-
-  if (!fieldData) return null;
-
-  if (typeof fieldData === 'object' && !Array.isArray(fieldData)) {
-    return Object.values(fieldData);
-  }
-
-  return fieldData;
-}
-
 // Open project (create if it doesn't exist with current author or add another current author)
 async function open_project(firestore, id, author, projectData) {
   const projectPath = `projects/${id}`;
@@ -172,22 +146,13 @@ async function open_project(firestore, id, author, projectData) {
   const snapshot = await getDoc(projectRef);
 
   if (snapshot.exists()) {
-    const data = snapshot.data();
-    let currentAuthors = data["current-authors"] || [];
-
-    if (!Array.isArray(currentAuthors)) {
-      currentAuthors = Object.values(currentAuthors);
-    }
-
-    currentAuthors = updateCurrentAuthors(currentAuthors, author);
-
-    await updateDoc(projectRef, { "current-authors": currentAuthors });
-    alert("Another author is activating the project...");
-    console.log("Project already existed. Updated current-authors:", currentAuthors);
+   
+     alert("Project already exists");
+    console.log("Project already exist.");
   } else {
     await setDoc(projectRef, {
       ...projectData,
-      "current-authors": [author]
+      
     });
     alert("Project activation");
     console.log("Project activated on Firestore");
@@ -207,13 +172,24 @@ function getData_from_metadata(obj, path = "") {
     const currentPath = path ? `${path}/${key}` : key;
 
     if (typeof val === "object") {
-      files.push({ path: currentPath, uuid: val.uuid, modified: val.modified === "true" });
-      files = files.concat(getData_from_metadata(val, currentPath));
+      const isFile = "uuid" in val && "content" in val; // file has both uuid and content
+      if (isFile) {
+        files.push({
+          path: currentPath,
+          uuid: val.uuid,
+          modified: val.modified === true || val.modified === "true"
+        });
+      } else {
+        // directory or nested structure
+        files = files.concat(getData_from_metadata(val, currentPath));
+      }
     }
   }
 
   return files;
 }
+
+
 
 
 //we turn Firestore tree in a structure similar to the metadata so it's easier to compare
@@ -268,60 +244,54 @@ function compareFileLists(localList, firestoreList) {
     renamed_or_moved: []
   };
 
-  const firestoreByPath = Object.fromEntries(firestoreList.map(f => [f.path, f]));
   const firestoreByUuid = Object.fromEntries(firestoreList.map(f => [f.uuid, f]));
-  const localByUuid = Object.fromEntries(
-    localList
-      .filter(f => f.uuid && typeof f.uuid === "string" && f.uuid.trim() !== "")
-      .map(f => [f.uuid, f])
-  );
+  const localByUuid = Object.fromEntries(localList.map(f => [f.uuid, f]));
 
   const seenUuids = new Set();
 
   for (const localFile of localList) {
-    const { path: localPath, uuid: localUuid, modified } = localFile;
+    const { uuid: localUuid, path: localPath, modified } = localFile;
 
-    // Caso 1: uuid mancante, vuoto o non valido → file nuovo
-    if (!("uuid" in localFile) || !localUuid || typeof localUuid !== "string" || localUuid.trim() === "") {
+    // UUID non valido o mancante → considerato aggiunto
+    if (!localUuid || typeof localUuid !== "string" || localUuid.trim() === "") {
       result.added.push(localFile);
       continue;
     }
 
-    seenUuids.add(localUuid);
+    const remoteFile = firestoreByUuid[localUuid];
 
-    const remoteFileByPath = firestoreByPath[localPath];
-    const remoteFileByUuid = firestoreByUuid[localUuid];
+    if (remoteFile) {
+      seenUuids.add(localUuid);
 
-    if (remoteFileByPath && remoteFileByPath.uuid === localUuid) {
+      if (remoteFile.path !== localPath) {
+        result.renamed_or_moved.push({
+          uuid: localUuid,
+          oldPath: remoteFile.path,
+          newPath: localPath
+        });
+      }
+
       if (modified) {
         result.modified.push(localFile);
       } else {
         result.unchanged.push(localFile);
       }
-    } else if (remoteFileByUuid) {
-      // UUID esiste ma path diverso → spostato o rinominato
-      if (remoteFileByUuid.path !== localPath) {
-        result.renamed_or_moved.push({
-          oldPath: remoteFileByUuid.path,
-          newPath: localPath,
-          uuid: localUuid
-        });
-      }
     } else {
-      // UUID valido ma non presente nel remote → nuovo file
+      // UUID valido, ma non esiste in remoto → file nuovo
       result.added.push(localFile);
     }
   }
 
-  // File cancellati: esistono in firestore ma non più nel metadata
+  // Trova i file eliminati: UUID nel remoto ma non più nel locale
   for (const remoteFile of firestoreList) {
-    if (!seenUuids.has(remoteFile.uuid)) {
+    if (!localByUuid[remoteFile.uuid]) {
       result.deleted.push(remoteFile);
     }
   }
 
   return result;
 }
+
 
 //retrieves new metadata to know last-modifer
 function getMetaFromMetadataPath(path, metadata) {
@@ -337,22 +307,15 @@ function getMetaFromMetadataPath(path, metadata) {
 }
 
 
-async function update_last_modified(id,to_add, to_modifiy_content, to_rename_or_move, to_delete, lastModified_items, new_metadata) {
-  const firestore = getFirestore();
+async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or_move, to_delete, lastModified_items, new_metadata, new_last_modified ) {
+ const firestore = getFirestore();
   const document_path = `projects/${id}`;
-  console.log("Firestore path: ", document_path)
   const last_modifiedRef = doc(firestore, document_path);
-  
-  // retrieve current last-modified map
+
   const snapshot = await getDoc(last_modifiedRef);
   let old_last_modified = snapshot.exists() ? snapshot.data()["last-modified"] || {} : {};
-  console.log("Old map last-modified:", old_last_modified);
 
-  // created last modified map with the updated file system
-  const new_last_modified = generateLastModifiedMap(new_metadata);
-  console.log("New last-modified: ", new_last_modified)
-
-  // paths must be added to the last-modified map
+  // ➕ Add new files
   to_add.forEach(item => {
     const meta = new_last_modified[item.path];
     if (meta) {
@@ -360,96 +323,116 @@ async function update_last_modified(id,to_add, to_modifiy_content, to_rename_or_
     }
   });
 
-  console.log("AFTER ADDITION:", old_last_modified);
-
-  // modified content: only uuid_cache, last-modifer and timestamp need to be updated
+  // 🟡 Modify content
   to_modifiy_content.forEach(item => {
-    if (old_last_modified[item.path]) {
-      old_last_modified[item.path].timestamp = Timestamp.now();
-      old_last_modified[item.path].uuid_cache = crypto.randomUUID();
-      const meta = getMetaFromMetadataPath(item.path, new_metadata);
-      if (meta && meta["last-modifier"]) {
-        old_last_modified[item.path]["last-modifier"] = meta["last-modifier"];
-      }
+    const meta = new_metadata && getMetaFromMetadataPath(item.path, new_metadata);
+    const updated = new_last_modified[item.path];
+    if (updated && old_last_modified[item.path]) {
+      old_last_modified[item.path] = updated;
     }
   });
-   console.log("AFTER MODIFY CONTENT:", old_last_modified);
-  
+
+  // 🔄 Rename or move
   to_rename_or_move.forEach(item => {
-    if (old_last_modified[item.oldPath]) {
-      
-      const updated = {
-        ...old_last_modified[item.oldPath],
-        _name: item.newPath.split("/").pop(),
-        timestamp: Timestamp.now(),
-        uuid_cache: crypto.randomUUID(),
-        "last-modifier": (() => {
-        const meta = getMetaFromMetadataPath(item.newPath, new_metadata);
-        console.log("meta for last-modifier:", meta);
-        return meta && meta["last-modifier"] ? meta["last-modifier"] : old_last_modified[item.oldPath]["last-modifier"];
-      })()
-      };
-       console.log("old path: ",old_last_modified[item.oldPath])
-       console.log("_name: ",item.newPath.split("/").pop())
-       console.log("last-modifier: ",old_last_modified[item.oldPath]["last-modifier"])
-      // add new path and remove old path
+    const updated = new_last_modified[item.newPath];
+    if (updated && old_last_modified[item.oldPath]) {
       old_last_modified[item.newPath] = updated;
       delete old_last_modified[item.oldPath];
     }
   });
-  console.log("AFTER RENOMINATION OR MOVEMENT:", old_last_modified);
 
-
-  // remove from last-modified
+  // ➖ Delete
   to_delete.forEach(item => {
     delete old_last_modified[item.path];
   });
-  console.log("AFTER DELETION:", old_last_modified);
-  // save to Firestore 
+
   try {
     await updateDoc(last_modifiedRef, { "last-modified": old_last_modified });
     console.log("Last-modified successfully updated.");
   } catch (error) {
     console.error("Error in updating last-modified:", error);
   }
-
-
 }
 
-async function update_cache_array(relevantItems, metadata) {
+
+async function update_cache_array(relevantItems, to_delete, metadata, new_last_modified) {
   const cacheArray = [];
-  console.log("relevant item: ", relevantItems);
-  
-  relevantItems.forEach(item => {
+
+  // Filtra solo file con content
+  const filteredRelevantItems = relevantItems.filter(item => {
     const path = item.path || item.newPath;
-    console.log("Looking for meta with path:", path);
     const meta = getMetaFromMetadataPath(path, metadata);
-    console.log("Meta found:", meta);
-    console.log("Meta modified:", meta?.modified);
-    
-    if (meta) {
-      // Creo l'oggetto base
-      const itemObj = {
-        content: meta.content || "",
-        push_status: "in-progress",
-        path: path,
-        timestamp: Timestamp.now(),
-        uuid_cache: crypto.randomUUID(),
-        uuid: meta.uuid || ""
-      };
-      
-      // Aggiungo 'modified' solo se 'content' esiste (cioè è un file)
-      if (meta.hasOwnProperty('content')) {
-        itemObj.modified = meta.modified || false;
-      }
-      
-      cacheArray.push(itemObj);
-    }
+    return meta && meta.hasOwnProperty("content");
   });
-  
+
+  filteredRelevantItems.forEach(item => {
+    const path = item.path || item.newPath;
+    const meta = getMetaFromMetadataPath(path, metadata);
+    const lm = new_last_modified[path];
+
+    if (!meta || !lm) return;
+
+    const itemObj = {
+      content: meta.content || "",
+      push_status: "in-progress",
+      path: path,
+      timestamp: Timestamp.now(),
+      uuid_cache: lm.uuid_cache, // 👈 preso da last-modified
+      uuid: meta.uuid || "",
+      modified: meta.modified || false
+    };
+
+    cacheArray.push(itemObj);
+  });
+
+  to_delete.forEach(item => {
+    const path = item.path || item.newPath;
+    const meta = getMetaFromMetadataPath(path, metadata);
+    const lm = new_last_modified[path];
+
+    const itemObj = {
+      content: meta?.content || "",
+      push_status: "in-progress",
+      path: path,
+      timestamp: Timestamp.now(),
+      uuid_cache: lm?.uuid_cache || crypto.randomUUID(), // 👈 fallback solo se assente
+      uuid: item.uuid || "",
+      to_delete: true
+    };
+
+    if (meta?.hasOwnProperty('content')) {
+      itemObj.modified = meta.modified || false;
+    }
+
+    cacheArray.push(itemObj);
+  });
+
+  console.log("CACHE ARRAY:", cacheArray);
   await writeCacheToFirestore("cache", cacheArray);
 }
 
+
+
+
+
+function flatMetadataToList(flat) {
+  const files = [];
+
+  for (const path in flat) {
+    const meta = flat[path];
+
+    // consideriamo "file" solo i path che contengono un punto (es. .tex, .pdf, .md...)
+    if (path.includes(".") && typeof meta === "object" && meta.uuid) {
+      files.push({
+        path,
+        uuid: meta.uuid,
+        modified: false // oppure puoi mettere un check se è presente meta.modified
+      });
+    }
+  }
+
+  return files;
+}
 
 
 
@@ -463,12 +446,15 @@ async function update_project(id, new_metadata) {
   const oldTree = snapshot.exists() ? snapshot.data().tree || {} : {};
   console.log("Firestore tree: ", oldTree)
   
+  console.log("NEW METADATA: ",  new_metadata)
   //let's turn firestore tree into something comparable with the new metadata
   const localList = getData_from_metadata(new_metadata);
   console.log("Files extracted from new metadatada: ", localList)
   const firestoreStructure = rebuildFirestoreAsMetadata(oldTree);
-  const firestoreList = getData_from_metadata(firestoreStructure);
+  const firestoreList = flatMetadataToList(firestoreStructure);
   console.log("Files extracted from firestore: ", firestoreList)
+
+  const new_last_modified = generateLastModifiedMap(new_metadata);
 
   const comparison = compareFileLists(localList, firestoreList);
 
@@ -484,7 +470,14 @@ async function update_project(id, new_metadata) {
   ...comparison.modified,
   ...comparison.renamed_or_moved
 ];
-  await update_cache_array( cache_items, new_metadata);
+  const deleted = [
+  ...comparison.deleted,
+  ...comparison.renamed_or_moved.map(item => ({
+    path: item.oldPath,
+    uuid: item.uuid
+  }))
+];
+  await update_cache_array(cache_items, deleted, new_metadata, new_last_modified);
 
   //updates last-modified
   const lastModified_items = [
@@ -493,7 +486,7 @@ async function update_project(id, new_metadata) {
   ...comparison.renamed_or_moved,
 
 ];
-  await update_last_modified(id, comparison.added,comparison.modified, comparison.renamed_or_moved , comparison.deleted, lastModified_items, new_metadata)
+  await update_last_modified(id, comparison.added,comparison.modified, comparison.renamed_or_moved , comparison.deleted, lastModified_items, new_metadata, new_last_modified)
 
 
 
@@ -504,28 +497,6 @@ async function update_project(id, new_metadata) {
 
 
 
-// Close project (remove current author or delete document if none left)
-async function close_project(firestore, id, author) {
-  const projectPath = `projects/${id}`;
-  let currentAuthors = await fetch(firestore, projectPath, "current-authors");
-
-  if (!Array.isArray(currentAuthors)) {
-    currentAuthors = currentAuthors ? Object.values(currentAuthors) : [];
-  }
-
-  currentAuthors = currentAuthors.filter(a => a !== author);
-
-  const projectRef = doc(firestore, projectPath);
-  if (currentAuthors.length === 0) {
-    await deleteDoc(projectRef);
-    console.log(`Project ${id} deleted from Firestore.`);
-  } else {
-    await updateDoc(projectRef, {
-      "current-authors": currentAuthors
-    });
-    console.log(`Removed author ${author} from current-authors.`);
-  }
-}
 
 // DELETE project PERMANENTLY (also from firestore and github)
 async function delete_project(firestore, id) {
@@ -542,7 +513,6 @@ async function delete_project(firestore, id) {
 // buttons
 window.addEventListener("DOMContentLoaded", () => {
   const openBtn = document.getElementById("open");
-  const closeBtn = document.getElementById("close");
   const updateBtn = document.getElementById("update");
   const deleteBtn = document.getElementById("delete");
 
@@ -567,17 +537,6 @@ window.addEventListener("DOMContentLoaded", () => {
       await open_project(firestore, id, author, projectData);
       await writeCacheToFirestore("cache", cacheArray);
      
-    });
-  }
-
-  if (closeBtn) {
-    closeBtn.addEventListener("click", async (event) => {
-      const button = event.currentTarget;
-      const author = button.getAttribute("data-author");
-      const id = button.getAttribute("data-project-id");
-
-      alert(`Closing project for ${author}...`);
-      await close_project(firestore, id, author);
     });
   }
 
