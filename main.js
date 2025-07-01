@@ -409,12 +409,29 @@ function flatMetadataToList(flat) {
 
 
 // update project
-async function update_project(id, new_metadata) {
-  const treePath = `projects/${id}`;
-  const treeRef = doc(firestore, treePath);
+async function update_project(id, new_metadata, title, co_authors) {
+  //retrieves title and co-authors
+  const projectPath = `projects/${id}`;
+  const projectRef = doc(firestore, projectPath);
+  const snapshot = await getDoc(projectRef);
+
+  //retrieves old title and co-authors
+  const old_title = snapshot.exists() ? snapshot.data().title || {} : {};
+  console.log("Firestore title: ", title)
+  const old_co_authors = snapshot.exists() ? snapshot.data()["co-authors"] ?? [] : [];
+  console.log("Firestore co-authors: ", old_co_authors)
+
+  if (title !== old_title || JSON.stringify(co_authors) !== JSON.stringify(old_co_authors)) {
+    //updates title and co-authors
+    await updateDoc(projectRef, {
+      title: title,
+      "co-authors": co_authors
+    });
+    console.log("Title and co-authors updated in Firestore");
+  }
+
 
   // Retrieves old tree from Firestore
-  const snapshot = await getDoc(treeRef);
   const oldTree = snapshot.exists() ? snapshot.data().tree || {} : {};
   console.log("Firestore tree: ", oldTree)
   
@@ -516,9 +533,11 @@ window.addEventListener("DOMContentLoaded", () => {
       const id = button.getAttribute("data-project-id");
       const data_tree = button.getAttribute("data-tree");
       const metadata = JSON.parse(data_tree);
+      const title = button.getAttribute("data-title");
+      const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
 
       alert(`Updating project...`);
-      await update_project(id, metadata);
+      await update_project(id, metadata, title, co_authors);
     });
   }
 
