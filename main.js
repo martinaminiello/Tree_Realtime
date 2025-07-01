@@ -64,7 +64,7 @@ async function writeCacheToFirestore(projectId, cacheArray) {
   const firestore = getFirestore();
   const cacheDocRef = doc(firestore, "cache", projectId);
 
-  // Controllo campi undefined PRIMA di scrivere
+  // check for undefined values
   cacheArray.forEach((item, index) => {
     Object.entries(item).forEach(([key, value]) => {
       if (value === undefined) {
@@ -288,7 +288,7 @@ async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or
   const snapshot = await getDoc(last_modifiedRef);
   let old_last_modified = snapshot.exists() ? snapshot.data()["last-modified"] || {} : {};
 
-  // ➕ Add new files
+  // Add new files
   to_add.forEach(item => {
     const meta = new_last_modified[item.path];
     if (meta) {
@@ -296,7 +296,7 @@ async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or
     }
   });
 
-  // 🟡 Modify content
+  // Modify content
   to_modifiy_content.forEach(item => {
     const meta = new_metadata && getMetaFromMetadataPath(item.path, new_metadata);
     const updated = new_last_modified[item.path];
@@ -305,7 +305,7 @@ async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or
     }
   });
 
-  // 🔄 Rename or move
+  // Rename or move
   to_rename_or_move.forEach(item => {
     const updated = new_last_modified[item.newPath];
     if (updated && old_last_modified[item.oldPath]) {
@@ -314,7 +314,7 @@ async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or
     }
   });
 
-  // ➖ Delete
+  // Delete
   to_delete.forEach(item => {
     delete old_last_modified[item.path];
   });
@@ -331,7 +331,7 @@ async function update_last_modified(id, to_add, to_modifiy_content, to_rename_or
 async function update_cache_array(relevantItems, to_delete, metadata, new_last_modified) {
   const cacheArray = [];
 
-  // pnly files
+  // only files
   const filteredRelevantItems = relevantItems.filter(item => {
     const path = item.path || item.newPath;
     const meta = getMetaFromMetadataPath(path, metadata);
@@ -391,12 +391,14 @@ function flatMetadataToList(flat) {
   for (const path in flat) {
     const meta = flat[path];
 
-    // consideriamo "file" solo i path che contengono un punto (es. .tex, .pdf, .md...)
+    console.log("[FLATMETADATA] path:", path, "meta:", meta, "modified:", meta.modified);
+
+    // files are the ones with a path that includes a dot
     if (path.includes(".") && typeof meta === "object" && meta.uuid) {
       files.push({
         path,
         uuid: meta.uuid,
-        modified: false // oppure puoi mettere un check se è presente meta.modified
+        modified: meta.modified 
       });
     }
   }
