@@ -6,43 +6,37 @@
   <title>Firebase JS</title>
 </head>
 <body>
-  <h1>Firebase Realtime DB Test</h1>
+  <h1>Firestore DB Test</h1>
 
 <button
   id="open"
-  data-project-id="pjs_0000000004"
+  data-project-id="0_nuova_prova1"
   data-author="user_990"
   data-title="Esempio js"
   data-co-authors='{"0": "user_111", "1": "user_990"}'
-  data-tree='{
+  data-tree='
+  {
   "main.tex": {
-    "content": "Contenuto bast afile",
-    "last-modifier": "user_001",
-    "id_file": "f_001"
+    "content": "Contenuto principale del documento LaTeX.",
+    "last-modifier": "user_001"
   },
-  "NO_CHAPTERS_ALLOWED": {
-    "id_folder": "d_001",
-    "chapterwewewew.tex": {
-      "content": "Contenuto del capitolo1",
-      "last-modifier": "user_001",
-      "id_file": "f_002"
+  "sections": {
+    "section1.tex": {
+      "content": "Contenuto dettagliato della prima sezione del documento.",
+      "last-modifier": "user_002"
     },
-    "chapterLOLDEL.tex": {
-      "content": "Contenuto del capitolo1",
-      "last-modifier": "user_001",
-      "id_file": "f_003"
+    "glossary.tex": {
+      "content": "Definizioni e termini chiave per il glossario.",
+      "last-modifier": "user_003"
     },
-    "CHAPTERS_ALLOWED": {
-      "id_folder": "d_002",
-      "chapter88888888888888h.tex": {
-        "content": "Contenuto del capitolo1",
-        "last-modifier": "user_001",
-        "id_file": "f_004"
+    "chapters": {
+      "chapter1.tex": {
+        "content": "Introduzione al Capitolo 1: Panoramica e Obiettivi.",
+        "last-modifier": "user_001"
       },
-      "chapterlollipop.tex": {
-        "content": "Contenuto del capitolo1",
-        "last-modifier": "user_001",
-        "id_file": "f_005"
+      "references.bib": {
+        "content": "@article{smith2023, title={New Discoveries}}",
+        "last-modifier": "user_002"
       }
     }
   }
@@ -51,45 +45,55 @@
   Open project
 </button>
 
-<button id="close" data-author="user_990" data-project-id="pjs_0000000004">Close project</button>
 
-<button id="update" data-project-id="pjs_0000000004" 
-data-tree='{
-  "o.tex": {
-    "content": "Contenuto bast afile",
+
+<button id="update" data-project-id="0_nuova_prova1" 
+data-tree='
+
+{
+  "NUOVO_file.tex": {
+    "content": "Contenuto nuovo",
     "last-modifier": "user_001",
-    "id_file": "f_001"
+    "uuid": "e811789b-eb29-4225-bf8e-b1a01c2db3c4",
+    "modified": false
   },
-  "NO_CHAPTERS": {
-    "id_folder": "d_001",
-    "chapterwewewew.tex": {
-      "content": "Contenuto del capitolo1",
-      "last-modifier": "user_001",
-      "id_file": "f_002"
-    },
-    "chapterLOLDEL.tex": {
-      "content": "Contenuto del capitolo1",
-      "last-modifier": "user_001",
-      "id_file": "f_003"
-    },
-    "CHAPTERS_ALLOWED": {
-      "id_folder": "d_002",
-      "chapter88888888888888h.tex": {
-        "content": "Contenuto del capitolo1",
+  "chapters123": {
+      "uuid": "627f937b-10b0-46c9-af9f-5e6a6561d032",
+      "references.bib": {
+        "content": "@article{doe2024, title={Sample Reference}} MODIFICHE",
         "last-modifier": "user_001",
-        "id_file": "f_004"
+        "uuid": "98d0eec0-aecc-408c-a888-0dfb15098728",
+        "modified": true
       },
-      "chapterlollipop.tex": {
-        "content": "Contenuto del capitolo1",
-        "last-modifier": "user_001",
-        "id_file": "f_005"
-      }
-    }
+      "sections_RENAMED123": {
+    "uuid": "dde03c77-cf4c-487b-9bdd-fbfed3504bec",
+    "glossary.tex": {
+      "content": "Definizioni per il glossario del progetto.",
+      "last-modifier": "user_003",
+      "uuid": "2838edb9-99b0-454f-9902-8a6f6d54831c",
+      "modified": false
+    },
+    
+    "section1_RENAMED.tex": {
+      "content": "Dettagli della prima sezione del testo. MODIFICA",
+      "last-modifier": "user_002",
+      "uuid": "51ad28ec-2799-4f6e-b671-093ab3777ae1",
+      "modified": false
+    },
+    "main.tex": {
+    "content": "Contenuto principale del documento. MODIFICA",
+    "last-modifier": "user_001",
+    "uuid": "d0fbd7da-2c3f-4f32-b8a8-571f56f36134",
+    "modified": false
   }
+  }
+     
+    }
 }
+
 '>Update project</button>
 
-<button id="delete"  data-project-id="pjs_0000000004" >Delete project</button>
+<button id="delete"  data-project-id="0_nuova_prova1" >Delete project</button>
 
 
 <script type="module" src="main.js"></script>
