@@ -4,43 +4,42 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Firebase JS</title>
+  <style>
+#toast {
+  visibility: hidden;
+  min-width: 250px;
+  margin-left: -125px;
+  background-color: #00ce0a;
+  color: #fff;
+  text-align: center;
+  border-radius: 4px;
+  padding: 16px;
+  position: fixed;
+  z-index: 1000;
+  left: 50%;
+  bottom: 30px;
+  font-size: 17px;
+  opacity: 0;
+  transition: opacity 0.5s, visibility 0.5s;
+}
+#toast.show {
+  visibility: visible;
+  opacity: 1;
+}
+.uuid-textarea {
+  margin-top: 20px;
+}
+</style>
 </head>
 <body>
   <h1>Firestore DB Test</h1>
 
 <button
   id="open"
-  data-project-id="0_nuova_prova011"
+  data-project-id="0_nuova_prova017"
   data-title="Esempio js"
   data-co-authors='{"0": "user_111", "1": "user_990"}'
-  data-tree='
-  {
-  "main.tex": {
-    "content": "Contenuto principale del documento LaTeX.",
-    "last-modifier": "user_001"
-  },
-  "sections": {
-    "section1.tex": {
-      "content": "Contenuto dettagliato della prima sezione del documento.",
-      "last-modifier": "user_002"
-    },
-    "glossary.tex": {
-      "content": "Definizioni e termini chiave per il glossario.",
-      "last-modifier": "user_003"
-    },
-    "chapters": {
-      "chapter1.tex": {
-        "content": "Introduzione al Capitolo 1: Panoramica e Obiettivi.",
-        "last-modifier": "user_001"
-      },
-      "references.bib": {
-        "content": "@article{smith2023, title={New Discoveries}}",
-        "last-modifier": "user_002"
-      }
-    }
-  }
-}
-'>
+>
   Open project
 </button>
 
@@ -49,58 +48,16 @@
 <button id="update" data-project-id="0_nuova_prova011" 
 data-title="Titolo nuovo per js"
 data-co-authors='{"0": "user_111", "1": "user_990"}'
-data-tree='
-{
-    
-       "referencesNOT.bib": {
-        "content": "@article{smith2023, title={New Discoveries by Smith MODIFICATO ANCORA NOT}}",
-        "last-modifier": "user_002",
-        "uuid": "d21ad34d-70ed-4817-a5a9-2bc0d54e6ea2",
-        "modified": true
-      },
 
-  "sections777444": {
-    "uuid": "26599392-fe20-4dcf-a947-9f7878445901",
-    "glossary.tex": {
-      "content": "Definizioni per il glossario del progetto. GLOSS MODIFY",
-      "last-modifier": "user_003",
-      "uuid": "d7947b49-57df-42b9-be0d-a139604035eb",
-      "modified": true
-    },
-    "aggiunta.tex": {
-        "content": "seconda aggiunta.",
-        "last-modifier": "user_001",
-        "uuid": "",
-        "modified": false
-      },
- 
-    
-    "chapters": {
-      "uuid": "7b833379-fbe6-460c-a6a8-3d2da38c1001",
-      "nuova_cartella": {
-        "uuid": "",
-        "NUOVO_non_piu.bib": {
-        "content": "nuovooooo e modificato e ancora",
-        "last-modifier": "user_002",
-        "uuid": "8a15bc1c-0a19-4c6f-b857-8530898eb9f1",
-        "modified": false
-       }
-      },
- 
-      "main.tex": {
-        "content": "Contenuto BIHHHHHHHHHHHHH principale del documento. MODIFICA",
-        "last-modifier": "user_001",
-        "uuid": "9de36a29-e826-4bad-82bd-aacab64dbb42",
-        "modified": true
-      }
-    }
-  }
-}
+>Update project</button>
 
-'>Update project</button>
+<button id="delete"  data-project-id="0_nuova_prova017" >Delete project</button>
 
-<button id="delete"  data-project-id="0_nuova_prova011" >Delete project</button>
+ <textarea class="uuid-textarea" rows="30" cols="50" placeholder="Here will appear the uuids created in the back-end..."></textarea>
 
+
+
+<div id="toast"></div>
 
 <script type="module" src="main.js"></script>
 

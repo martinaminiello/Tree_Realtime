@@ -481,8 +481,15 @@ window.addEventListener("DOMContentLoaded", () => {
       const button = event.currentTarget;
       const id = button.getAttribute("data-project-id");
       const title = button.getAttribute("data-title");
-      const data_tree = button.getAttribute("data-tree");
-      const rawtree = JSON.parse(data_tree);
+      const textarea = document.getElementsByClassName("uuid-textarea")[0];
+      const data_tree = textarea ? textarea.value : "{}";
+      let rawtree = {};
+      try {
+        rawtree = JSON.parse(data_tree);
+      } catch (e) {
+        alert("Errore nel parsing del JSON della textarea: " + e.message);
+        return;
+}
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
          
       worker.postMessage({
@@ -549,7 +556,11 @@ worker.onmessage = async (e) => {
     
     await open_project(firestore, processedData.id, processedData.projectData);
     await writeCacheToFirestore("cache", processedData.cacheArray);
+
+    const lastModified = processedData.projectData["last-modified"];
+    await checkItemsArePushedAndShowToast("cache", processedData.id, lastModified)
   }
+   
 
     if (action === 'update') {
 
@@ -567,4 +578,128 @@ worker.onmessage = async (e) => {
     await delete_project(firestore, processedData.id);
   }
 };
+
+
+
+
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.className = "show";
+  setTimeout(() => {
+    toast.className = toast.className.replace("show", "");
+  }, 3000); // 3 seconds
+}
+
+async function checkItemsArePushedAndShowToast(cacheId,projectId, lastModified) {
+  let attempts = 0;
+  const maxAttempts = 10; 
+  const intervalMs = 3000; 
+  const firestore = getFirestore();
+  const cacheDocRef = doc(firestore, "cache", cacheId);
+
+  return new Promise((resolve) => {
+    const poll = async () => {
+      const cacheSnap = await getDoc(cacheDocRef);
+      if (!cacheSnap.exists()) {
+        resolve(false);
+        return;
+      }
+      const cacheArray = cacheSnap.data().queue_item || [];
+      const lastModifiedUuids = new Set(Object.values(lastModified).map(lm => lm.uuid_cache));
+      const stillPresent = cacheArray.some(item => lastModifiedUuids.has(item.uuid_cache));
+      if (!stillPresent) {
+        showToast("Project was created in Github");
+
+        //retrieves Firestore tree
+        const projectDocRef = doc(firestore, "projects", projectId);
+        const projectSnap = await getDoc(projectDocRef);
+        if (projectSnap.exists()) {
+          const tree = projectSnap.data().tree || {};
+          const textarea = document.querySelector('.uuid-textarea');
+          if (textarea) {
+            
+            let currentMetadata;
+            try {
+              currentMetadata = JSON.parse(textarea.value);
+            } catch {
+              currentMetadata = {};
+            }
+         
+            const merged = mergeUuidAndModifiedToMetadata(currentMetadata, tree);
+            textarea.value = JSON.stringify(merged, null, 2);
+          }
+        }
+        resolve(true);
+        return;
+      }
+      attempts++;
+      if (attempts < maxAttempts) {
+        setTimeout(poll, intervalMs);
+      } else {
+        resolve(false); 
+      }
+    };
+    poll();
+  });
+}
+
+
+//finds uuids for paths in Friestore tree
+function findUuidForPath(fsNode, pathParts, level = 0) {
+  if (!fsNode || !pathParts || pathParts.length === 0) return "";
+
+
+  for (const uuid in fsNode) {
+    const node = fsNode[uuid];
+    if (typeof node === "string") {
+    
+      if (node === pathParts[0] && pathParts.length === 1) {
+        return uuid;
+      }
+    } else if (typeof node === "object" && node._name) {
+    
+      if (node._name === pathParts[0]) {
+     
+        if (pathParts.length > 1) {
+          const found = findUuidForPath(node, pathParts.slice(1), level + 1);
+          if (found) return found;
+        }
+      }
+    }
+  }
+  return "";
+}
+
+//FUNCTION WHICH ELABORATES DATA FROM FRIESTORE TREE BEFORE SENDING IT TO THE CLIENT
+function mergeUuidAndModifiedToMetadata(metadata, firestoreTree) {
+  function traverse(metaNode, fsNodeRoot, parentPath = "") {
+    const result = Array.isArray(metaNode) ? [] : {};
+    for (const key in metaNode) {
+      const value = metaNode[key];
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "content" in value &&
+        "last-modifier" in value
+      ) {
+      
+        const path = parentPath ? `${parentPath}/${key}` : key;
+        const uuid = findUuidForPath(firestoreTree, path.split("/"));
+        result[key] = {
+          ...value,
+          uuid: uuid || "",
+          modified: false
+        };
+      } else if (typeof value === "object" && value !== null) {
+        const path = parentPath ? `${parentPath}/${key}` : key;
+        result[key] = traverse(value, fsNodeRoot, path);
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  return traverse(metadata, firestoreTree, "");
+}
 
