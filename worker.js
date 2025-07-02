@@ -16,6 +16,15 @@ self.onmessage = (e) => {
           cacheArray
         }
       });
+    
+      // message to the Client
+     if (firestoreTree) {
+        self.postMessage({
+          action: 'github_created',
+          message: 'progetto creato su github!',
+          firestoreTree: firestoreTree
+        });
+      }
     }
     
      if (action === 'update') {
