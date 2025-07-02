@@ -22,44 +22,6 @@ const firestore = getFirestore(app);
 
 
 
-//cache
-function generateCacheArray(tree, lastModifiedMap, basePath = '') {
-  const result = [];
-
-  function traverse(node, currentPath = '') {
-    for (const key in node) {
-      const value = node[key];
-      const fullPath = currentPath ? `${currentPath}/${key}` : key;
-
-      if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
-        const meta = lastModifiedMap[fullPath];
-
-        if (meta) {
-          result.push({  
-              content: value.content,
-              push_status: "in-progress",
-              path: fullPath,
-              timestamp: Timestamp.now(),
-              uuid_cache: meta.uuid_cache,
-         
-            
-          });
-        }
-      }
-      
-
-      // If it's a folder, recurse
-      else if (typeof value === 'object' && value !== null) {
-        traverse(value, fullPath);
-      }
-    }
-  }
-
-  traverse(tree, basePath);
-  return result;
-}
-
-
 async function writeCacheToFirestore(projectId, cacheArray) {
   const firestore = getFirestore();
   const cacheDocRef = doc(firestore, "cache", projectId);
@@ -391,14 +353,13 @@ function flatMetadataToList(flat) {
   for (const path in flat) {
     const meta = flat[path];
 
-    console.log("[FLATMETADATA] path:", path, "meta:", meta, "modified:", meta.modified);
+    console.log("[FLATMETADATA] path:", path, "meta:", meta);
 
     // files are the ones with a path that includes a dot
     if (path.includes(".") && typeof meta === "object" && meta.uuid) {
       files.push({
         path,
-        uuid: meta.uuid,
-        modified: meta.modified 
+        uuid: meta.uuid
       });
     }
   }
@@ -459,6 +420,16 @@ async function update_project(id, new_metadata, title, co_authors) {
   ...comparison.modified,
   ...comparison.renamed_or_moved
 ];
+
+// avoid duplicates in case files was renames or moved and modified
+const seen = new Map();
+for (const item of cache_items) {
+  
+  const key = item.uuid + '|' + (item.path || item.newPath);
+  seen.set(key, item);
+}
+const deduped_cache_items = Array.from(seen.values());
+
   const deleted = [
   ...comparison.deleted,
   ...comparison.renamed_or_moved.map(item => ({
@@ -466,7 +437,7 @@ async function update_project(id, new_metadata, title, co_authors) {
     uuid: item.uuid
   }))
 ];
-  await update_cache_array(cache_items, deleted, new_metadata, new_last_modified);
+  await update_cache_array(deduped_cache_items, deleted, new_metadata, new_last_modified);
 
   //updates last-modified
   const lastModified_items = [
@@ -512,20 +483,19 @@ window.addEventListener("DOMContentLoaded", () => {
       const title = button.getAttribute("data-title");
       const data_tree = button.getAttribute("data-tree");
       const rawtree = JSON.parse(data_tree);
-      const lastModified = generateLastModifiedMap(rawtree);
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
-      const cacheArray = generateCacheArray(rawtree, lastModified);
-
-      
-
-      const projectData = { id, title,"last-modified": lastModified, "co-authors": co_authors };
-
-      console.log("projectData:", projectData);
-      await open_project(firestore, id, projectData);
-      await writeCacheToFirestore("cache", cacheArray);
-     
+         
+      worker.postMessage({
+      action: 'open',
+      id,
+      title,
+      metadata: rawtree,
+      co_authors
     });
-  }
+  });
+}
+     
+ 
 
   if (updateBtn) {
     updateBtn.addEventListener("click", async (event) => {
@@ -535,19 +505,66 @@ window.addEventListener("DOMContentLoaded", () => {
       const metadata = JSON.parse(data_tree);
       const title = button.getAttribute("data-title");
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
+      console.log("METADATA FROM BOTTON", metadata);
 
-      alert(`Updating project...`);
-      await update_project(id, metadata, title, co_authors);
+      alert(`Updating project ${id}...`);
+
+         worker.postMessage({
+      action: 'update',
+      id,
+      title,
+      metadata: metadata,
+      co_authors
     });
-  }
+  });
+}
+   
 
   if (deleteBtn) {
     deleteBtn.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const id = button.getAttribute("data-project-id");
-
+    
       alert(`Deleting project ${id}...`);
-      await delete_project(firestore, id);
+
+      worker.postMessage({
+      action: 'delete',
+      id
     });
-  }
+  });
+}
 });
+
+
+// WORKER
+const worker = new Worker('worker.js');
+
+worker.onmessage = async (e) => {
+  const { action, processedData, error } = e.data;
+  if (error) {
+    alert("Worker error: " + error);
+    return;
+  }
+  if (action === 'open') {
+    
+    await open_project(firestore, processedData.id, processedData.projectData);
+    await writeCacheToFirestore("cache", processedData.cacheArray);
+  }
+
+    if (action === 'update') {
+
+  await update_project(
+    processedData.id,
+    processedData.metadata,
+    processedData.title,
+    processedData.co_authors
+  );
+}
+
+
+   if (action === 'delete') {
+    
+    await delete_project(firestore, processedData.id);
+  }
+};
+
