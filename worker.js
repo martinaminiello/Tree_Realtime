@@ -16,15 +16,7 @@ self.onmessage = (e) => {
           cacheArray
         }
       });
-    
-      // message to the Client
-     if (firestoreTree) {
-        self.postMessage({
-          action: 'github_created',
-          message: 'progetto creato su github!',
-          firestoreTree: firestoreTree
-        });
-      }
+   
     }
     
      if (action === 'update') {
@@ -38,8 +30,9 @@ self.onmessage = (e) => {
       co_authors
     }
   });
-}
 
+
+    }
 
      if (action === 'delete') {
 
@@ -49,7 +42,11 @@ self.onmessage = (e) => {
           id
         }
       });
+    
+
+
     }
+
 
 
     

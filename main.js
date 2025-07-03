@@ -486,8 +486,8 @@ window.addEventListener("DOMContentLoaded", () => {
       let rawtree = {};
       try {
         rawtree = JSON.parse(data_tree);
-      } catch (e) {
-        alert("Errore nel parsing del JSON della textarea: " + e.message);
+      } catch (e) {   //temporary
+        alert("Error in json in textarea: " + e.message);
         return;
 }
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
@@ -508,10 +508,17 @@ window.addEventListener("DOMContentLoaded", () => {
     updateBtn.addEventListener("click", async (event) => {
       const button = event.currentTarget;
       const id = button.getAttribute("data-project-id");
-      const data_tree = button.getAttribute("data-tree");
-      const metadata = JSON.parse(data_tree);
       const title = button.getAttribute("data-title");
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
+      const textarea = document.getElementsByClassName("uuid-textarea")[0];
+      const data_tree = textarea ? textarea.value : "{}";
+      let metadata = {};
+      try {
+        metadata = JSON.parse(data_tree);
+      } catch (e) {   //temporary
+        alert("Error in json in textarea: " + e.message);
+        return;
+}
       console.log("METADATA FROM BOTTON", metadata);
 
       alert(`Updating project ${id}...`);
@@ -558,7 +565,7 @@ worker.onmessage = async (e) => {
     await writeCacheToFirestore("cache", processedData.cacheArray);
 
     const lastModified = processedData.projectData["last-modified"];
-    await checkItemsArePushedAndShowToast("cache", processedData.id, lastModified)
+    await checkItemsArePushedAndShowToast("cache", processedData.id, lastModified, action)
   }
    
 
@@ -570,12 +577,33 @@ worker.onmessage = async (e) => {
     processedData.title,
     processedData.co_authors
   );
+
+
+  const projectDocRef = doc(firestore, "projects", processedData.id);
+  const projectSnap = await getDoc(projectDocRef);
+  let lastModified = {};
+  if (projectSnap.exists()) {
+    lastModified = projectSnap.data()["last-modified"] || {};
+  }
+
+  
+  await checkItemsArePushedAndShowToast(
+    "cache",
+    processedData.id,
+    lastModified,
+    action
+  );
 }
 
 
    if (action === 'delete') {
     
     await delete_project(firestore, processedData.id);
+      const projectDocRef = doc(firestore, "projects", processedData.id);
+  const projectSnap = await getDoc(projectDocRef);
+  if (!projectSnap.exists()) {
+    showToast("project deleted successfully.");
+  } 
   }
 };
 
@@ -588,10 +616,10 @@ function showToast(message) {
   toast.className = "show";
   setTimeout(() => {
     toast.className = toast.className.replace("show", "");
-  }, 3000); // 3 seconds
+  }, 6000); // 6 seconds
 }
 
-async function checkItemsArePushedAndShowToast(cacheId,projectId, lastModified) {
+async function checkItemsArePushedAndShowToast(cacheId,projectId, lastModified, action) {
   let attempts = 0;
   const maxAttempts = 10; 
   const intervalMs = 3000; 
@@ -609,7 +637,12 @@ async function checkItemsArePushedAndShowToast(cacheId,projectId, lastModified) 
       const lastModifiedUuids = new Set(Object.values(lastModified).map(lm => lm.uuid_cache));
       const stillPresent = cacheArray.some(item => lastModifiedUuids.has(item.uuid_cache));
       if (!stillPresent) {
-        showToast("Project was created in Github");
+        if(action=== 'open') {
+        showToast("project was created in Github");
+        }
+        if(action === 'update') {
+        showToast("project was succcessfully updated in Github");
+        }
 
         //retrieves Firestore tree
         const projectDocRef = doc(firestore, "projects", projectId);
@@ -671,7 +704,7 @@ function findUuidForPath(fsNode, pathParts, level = 0) {
   return "";
 }
 
-//FUNCTION WHICH ELABORATES DATA FROM FRIESTORE TREE BEFORE SENDING IT TO THE CLIENT
+//FUNCTION WHICH ELABORATES DATA FROM FRIESTORE TREE BEFORE SENDING IT TO THE CLIENT AT THE CREATION
 function mergeUuidAndModifiedToMetadata(metadata, firestoreTree) {
   function traverse(metaNode, fsNodeRoot, parentPath = "") {
     const result = Array.isArray(metaNode) ? [] : {};
@@ -702,4 +735,37 @@ function mergeUuidAndModifiedToMetadata(metadata, firestoreTree) {
   }
   return traverse(metadata, firestoreTree, "");
 }
+
+//FUNCTION WHICH RESETS METADATA AND ADD NEW UUIDS
+function mergeUuidAndResetModified(metadata, firestoreTree) {
+  function traverse(metaNode, fsNode, parentPath = "") {
+    const result = Array.isArray(metaNode) ? [] : {};
+    for (const key in metaNode) {
+      const value = metaNode[key];
+      if (
+        typeof value === "object" &&
+        value !== null &&
+        "content" in value &&
+        "last-modifier" in value
+      ) {
+        
+        const path = parentPath ? `${parentPath}/${key}` : key;
+        const uuid = findUuidForPath(firestoreTree, path.split("/"));
+        result[key] = {
+          ...value,
+          uuid: uuid || "",
+          modified: false
+        };
+      } else if (typeof value === "object" && value !== null) {
+        const path = parentPath ? `${parentPath}/${key}` : key;
+        result[key] = traverse(value, fsNode, path);
+      } else {
+        result[key] = value;
+      }
+    }
+    return result;
+  }
+  return traverse(metadata, firestoreTree, "");
+}
+
 
