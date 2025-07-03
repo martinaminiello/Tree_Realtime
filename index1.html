@@ -5,61 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Firebase JS</title>
   <style>
-#toast {
-  visibility: hidden;
-  min-width: 250px;
-  margin-left: -125px;
-  background-color: #00ce0a;
-  color: #fff;
-  text-align: center;
-  border-radius: 4px;
-  padding: 16px;
-  position: fixed;
-  z-index: 1000;
-  left: 50%;
-  bottom: 30px;
-  font-size: 17px;
-  opacity: 0;
-  transition: opacity 0.5s, visibility 0.5s;
-}
-#toast.show {
-  visibility: visible;
-  opacity: 1;
-}
-.uuid-textarea {
-  margin-top: 20px;
-}
-</style>
+    #toast {
+      visibility: hidden;
+      min-width: 250px;
+      margin-left: -125px;
+      background-color: #00ce0a;
+      color: #fff;
+      text-align: center;
+      border-radius: 4px;
+      padding: 16px;
+      position: fixed;
+      z-index: 1000;
+      left: 50%;
+      bottom: 30px;
+      font-size: 17px;
+      opacity: 0;
+      transition: opacity 0.5s, visibility 0.5s;
+    }
+    #toast.show {
+      visibility: visible;
+      opacity: 1;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px; /* spazio tra i bottoni */
+      margin-bottom: 20px;
+    }
+
+    .uuid-textarea {
+      display: block;
+    }
+  </style>
 </head>
 <body>
-  <h1>Firestore DB Test</h1>
+  <div class="container">
+    <h1>Firestore DB Test</h1>
 
-<button
-  id="open"
-  data-project-id="0_nuova_prova017"
-  data-title="Esempio js"
-  data-co-authors='{"0": "user_111", "1": "user_990"}'
->
-  Open project
-</button>
+    <div class="button-group">
+      <button
+        id="open"
+        data-project-id="0_nuova_prova017"
+        data-title="Esempio js"
+        data-co-authors='{"0": "user_111", "1": "user_990"}'
+      >
+        Open project
+      </button>
 
+      <button id="update"
+        data-project-id="0_nuova_prova017"
+        data-title="Titolo nuovo per js"
+        data-co-authors='{"0": "user_111", "1": "user_990"}'
+      >
+        Update project
+      </button>
 
+      <button id="delete" data-project-id="0_nuova_prova017">
+        Delete project
+      </button>
+    </div>
 
-<button id="update" data-project-id="0_nuova_prova017" 
-data-title="Titolo nuovo per js"
-data-co-authors='{"0": "user_111", "1": "user_990"}'
+    <textarea class="uuid-textarea" rows="30" cols="50" placeholder="Here will appear the uuids created in the back-end..."></textarea>
+  </div>
 
->Update project</button>
+  <div id="toast"></div>
 
-<button id="delete"  data-project-id="0_nuova_prova017" >Delete project</button>
-
- <textarea class="uuid-textarea" rows="30" cols="50" placeholder="Here will appear the uuids created in the back-end..."></textarea>
-
-
-
-<div id="toast"></div>
-
-<script type="module" src="main.js"></script>
-
+  <script type="module" src="main.js"></script>
 </body>
 </html>
