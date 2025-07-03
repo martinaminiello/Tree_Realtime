@@ -5,10 +5,10 @@ import {
   getDoc,
   setDoc,
   updateDoc,
-  deleteDoc,
-  Timestamp
+  deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 import { getcredentials } from "/credentials.js";
+import { Timestamp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
 
 
@@ -45,38 +45,66 @@ async function writeCacheToFirestore(projectId, cacheArray) {
   }
 }
 
-
 function generateLastModifiedMap(tree, basePath = '') {
   const result = {};
-
   for (const key in tree) {
     const value = tree[key];
     const currentPath = basePath ? `${basePath}/${key}` : key;
-
-    // file contains content
     if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
       result[currentPath] = {
         _name: key,
         "last-modifier": value["last-modifier"],
         timestamp: Timestamp.now(),
-        uuid_cache: value.uuid_cache || crypto.randomUUID()
+        uuid_cache: value.uuid_cache ||  crypto.randomUUID()
       };
+    } else if (typeof value === 'object' && value !== null) {
+      Object.assign(result, generateLastModifiedMap(value, currentPath));
     }
 
-    // folder
-    else if (typeof value === 'object' && value !== null) {
-      const nested = generateLastModifiedMap(value, currentPath);
-      Object.assign(result, nested);
+    console.log("timestamp", Timestamp.now());
+  }
+  return result;
+}
+
+function generateCacheArray(tree, lastModifiedMap, basePath = '') {
+  const result = [];
+  function traverse(node, currentPath = '') {
+    for (const key in node) {
+      const value = node[key];
+      const fullPath = currentPath ? `${currentPath}/${key}` : key;
+      if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
+        const meta = lastModifiedMap[fullPath];
+        if (meta) {
+          result.push({
+            content: value.content,
+            push_status: "in-progress",
+            path: fullPath,
+            timestamp: Timestamp.now(), 
+            uuid_cache: meta.uuid_cache,
+          });
+        }
+      } else if (typeof value === 'object' && value !== null) {
+        traverse(value, fullPath);
+      }
     }
   }
-
+  traverse(tree, basePath);
   return result;
 }
 
 
 
+
 // Open project (create if it doesn't exist with current author or add another current author)
 async function open_project(firestore, id, projectData) {
+   if (projectData && projectData["last-modified"]) {
+    for (const key in projectData["last-modified"]) {
+      const lm = projectData["last-modified"][key];
+      if (lm.timestamp && typeof lm.timestamp === "object" && "seconds" in lm.timestamp && "nanoseconds" in lm.timestamp) {
+        lm.timestamp = new Timestamp(lm.timestamp.seconds, lm.timestamp.nanoseconds);
+      }
+    }
+  }
   const projectPath = `projects/${id}`;
   const projectRef = doc(firestore, projectPath);
   const snapshot = await getDoc(projectRef);
@@ -482,6 +510,7 @@ window.addEventListener("DOMContentLoaded", () => {
       const id = button.getAttribute("data-project-id");
       const title = button.getAttribute("data-title");
       const textarea = document.getElementsByClassName("uuid-textarea")[0];
+      const owners= button.getAttribute("owners");
       const data_tree = textarea ? textarea.value : "{}";
       let rawtree = {};
       try {
@@ -491,13 +520,20 @@ window.addEventListener("DOMContentLoaded", () => {
         return;
 }
       const co_authors = JSON.parse(button.getAttribute("data-co-authors"));
+
+      const lastModified = generateLastModifiedMap(rawtree);
+      const cacheArray = generateCacheArray(rawtree, lastModified);
+  
          
       worker.postMessage({
       action: 'open',
       id,
       title,
       metadata: rawtree,
-      co_authors
+      co_authors,
+      owners,
+      lastModified: lastModified,
+      cacheArray: cacheArray
     });
   });
 }
@@ -558,6 +594,22 @@ worker.onmessage = async (e) => {
   if (error) {
     alert("Worker error: " + error);
     return;
+  }
+
+    if (processedData && processedData.lastModified) {
+    for (const key in processedData.lastModified) {
+      const lm = processedData.lastModified[key];
+      if (lm.timestamp && typeof lm.timestamp === "object" && "seconds" in lm.timestamp && "nanoseconds" in lm.timestamp) {
+        lm.timestamp = new Timestamp(lm.timestamp.seconds, lm.timestamp.nanoseconds);
+      }
+    }
+  }
+  if (processedData && processedData.cacheArray) {
+    for (const item of processedData.cacheArray) {
+      if (item.timestamp && typeof item.timestamp === "object" && "seconds" in item.timestamp && "nanoseconds" in item.timestamp) {
+        item.timestamp = new Timestamp(item.timestamp.seconds, item.timestamp.nanoseconds);
+      }
+    }
   }
   if (action === 'open') {
     
@@ -736,36 +788,6 @@ function mergeUuidAndModifiedToMetadata(metadata, firestoreTree) {
   return traverse(metadata, firestoreTree, "");
 }
 
-//FUNCTION WHICH RESETS METADATA AND ADD NEW UUIDS
-function mergeUuidAndResetModified(metadata, firestoreTree) {
-  function traverse(metaNode, fsNode, parentPath = "") {
-    const result = Array.isArray(metaNode) ? [] : {};
-    for (const key in metaNode) {
-      const value = metaNode[key];
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        "content" in value &&
-        "last-modifier" in value
-      ) {
-        
-        const path = parentPath ? `${parentPath}/${key}` : key;
-        const uuid = findUuidForPath(firestoreTree, path.split("/"));
-        result[key] = {
-          ...value,
-          uuid: uuid || "",
-          modified: false
-        };
-      } else if (typeof value === "object" && value !== null) {
-        const path = parentPath ? `${parentPath}/${key}` : key;
-        result[key] = traverse(value, fsNode, path);
-      } else {
-        result[key] = value;
-      }
-    }
-    return result;
-  }
-  return traverse(metadata, firestoreTree, "");
-}
+
 
 

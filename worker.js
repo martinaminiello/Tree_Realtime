@@ -1,12 +1,11 @@
 self.onmessage = (e) => {
   try {
-    const { action, id, title, metadata, co_authors } = e.data;
+    const { action, id, title, metadata, co_authors, owners, lastModified, cacheArray } = e.data;
 
     if (action === 'open') {
     
-      const lastModified = generateLastModifiedMap(metadata);
-      const cacheArray = generateCacheArray(metadata, lastModified);
-      const projectData = { id, title, "last-modified": lastModified, "co-authors": co_authors };
+     
+      const projectData = { id, title, "last-modified": lastModified, "co-authors": co_authors, "owners": owners };
 
       self.postMessage({
         action,
@@ -58,48 +57,7 @@ self.onmessage = (e) => {
 
 
 
-function generateCacheArray(tree, lastModifiedMap, basePath = '') {
-  const result = [];
-  function traverse(node, currentPath = '') {
-    for (const key in node) {
-      const value = node[key];
-      const fullPath = currentPath ? `${currentPath}/${key}` : key;
-      if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
-        const meta = lastModifiedMap[fullPath];
-        if (meta) {
-          result.push({
-            content: value.content,
-            push_status: "in-progress",
-            path: fullPath,
-            timestamp: Date.now(), 
-            uuid_cache: meta.uuid_cache,
-          });
-        }
-      } else if (typeof value === 'object' && value !== null) {
-        traverse(value, fullPath);
-      }
-    }
-  }
-  traverse(tree, basePath);
-  return result;
-}
 
-function generateLastModifiedMap(tree, basePath = '') {
-  const result = {};
-  for (const key in tree) {
-    const value = tree[key];
-    const currentPath = basePath ? `${basePath}/${key}` : key;
-    if (typeof value === 'object' && value !== null && 'content' in value && 'last-modifier' in value) {
-      result[currentPath] = {
-        _name: key,
-        "last-modifier": value["last-modifier"],
-        timestamp: Date.now(),
-        uuid_cache: value.uuid_cache ||  crypto.randomUUID()
-      };
-    } else if (typeof value === 'object' && value !== null) {
-      Object.assign(result, generateLastModifiedMap(value, currentPath));
-    }
-  }
-  return result;
-}
+
+
 
